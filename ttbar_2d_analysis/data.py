@@ -8,9 +8,7 @@ from deft_hep.helper import convert_hwu_to_numpy
 
 # K-factor from LO to NNLO at 13TeV
 LO_XSEC = 4.574e2  # 4.584 +- 0.003 from https://arxiv.org/abs/1405.0301
-NNLO_XSEC = (
-    831.76  # from https://twiki.cern.ch/twiki/bin/view/LHCPhysics/TtbarNNLO
-)
+NNLO_XSEC = 831.76  # from https://twiki.cern.ch/twiki/bin/view/LHCPhysics/TtbarNNLO
 k_factor = NNLO_XSEC / LO_XSEC
 
 
@@ -28,7 +26,7 @@ def get_CMS_data(path_list: List[Path]) -> pd.DataFrame:
                 "m_mid",
                 "m_min",
                 "m_max",
-                "m_value",
+                "value",
                 "stat_up",
                 "stat_down",
                 "sys_up",
@@ -57,34 +55,33 @@ def get_CMS_cov(path: Path, num_of_bins: int = 32):
     return covar
 
 
-def get_MC_signal(
-    file_list: List[Path], num_of_bins: int = 32
-) -> List[pd.DataFrame]:
+def get_MC_signal(file_list: List[Path], num_of_bins: int = 32) -> List[pd.DataFrame]:
 
     hist_list = [convert_hwu_to_numpy(f, num_of_bins) for f in file_list]
 
     pt_bounds = [0, 90, 180, 270, 800]
-    pt_left = [pt_bounds[i//8] for i in range(num_of_bins)]
-    pt_right = [pt_bounds[i//8+1] for i in range(num_of_bins)]
+    pt_left = [pt_bounds[i // 8] for i in range(num_of_bins)]
+    pt_right = [pt_bounds[i // 8 + 1] for i in range(num_of_bins)]
+
+    # Jankiness is required due to bug from deft.convert_hwu_to_numpy
+    # This grabs the last 8 bins since this includes the final bin
 
     edges, _ = hist_list[0]
-    edge_left = [edges[i] for i in range(len(edges) - 1)]
-    edge_right = [edges[i + 1] for i in range(len(edges) - 1)]
+    edge_left = [edges[i] for i in range(-9, -1)] * 4
+    edge_right = [edges[i + 1] for i in range(-9, -1)] * 4
+    bin_widths = [edges[i + 1] - edges[i] for i in range(-9, -1)] * 4
+    bin_widths = np.array(bin_widths)
 
     df_list = []
     for _, values in hist_list:
-        bin_widths = np.fromiter(
-            (edge_left[i] - edge_right[i] for i in range(len(edges) - 1)),
-            float,
-            len(edges) - 1,
-        )
+        assert (bin_widths > 0).all(), bin_widths
         scaled_values = values / bin_widths * k_factor
 
         df = pd.DataFrame(
             {
                 "m_min": edge_left,
                 "m_max": edge_right,
-                "m_value": scaled_values.tolist(),
+                "value": scaled_values.tolist(),
                 "pt_min": pt_left,
                 "pt_max": pt_right,
             }
